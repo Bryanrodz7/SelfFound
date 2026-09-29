@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  # Lets a release be started by hand from the Actions tab, picking a tag to build
+  workflow_dispatch:
 
 permissions:
   contents: write
