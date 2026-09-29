@@ -5,7 +5,7 @@
 ## Version: @project-version@
 ## IconTexture: Interface\Icons\INV_Shield_06
 ## Category: Other
-## X-Curse-Project-ID: 000000
+## X-Curse-Project-ID: 1718102
 ## SavedVariablesPerCharacter: SF_Char
 ## SavedVariables: SF_Ledger, SF_Settings
 
