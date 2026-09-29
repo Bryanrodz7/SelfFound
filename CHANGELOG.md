@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1-beta
+
+- First release built automatically from GitHub.
+- Players are matched by character ID, so first and last names are handled correctly.
+- Added support for WoW Forever.
+
 ## v0.1.0
 
 First public release.
