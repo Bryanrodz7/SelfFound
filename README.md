@@ -1,5 +1,7 @@
 # SelfFound
 
+![SelfFound Tracker logo](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/logo.png)
+
 A self-found challenge tracker for World of Warcraft. Play a character using only what you find, craft, or earn yourself — no trades, no mail, no auction house — and let other players with the addon see that your run is clean.
 
 ## Features
@@ -11,6 +13,28 @@ A self-found challenge tracker for World of Warcraft. Play a character using onl
 - **Badge and panel UI** — a movable badge shows your status, level and played time; the panel lists guildmates or everyone seen, with their status.
 - **Tooltips** — hover over a player to see their Self-Found status.
 - **Settings** — show, hide or lock the badge, badge size, window size, warnings, alerts, alert sound, and network mode.
+
+## Screenshots
+
+**The badge.** It sits near the minimap and shows your status, level and played time. Drag it anywhere, and resize it in the settings.
+
+![Badge next to the minimap](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/badge.png)
+
+**The player list.** Left-click the badge or type `/sf`. It shows your guild, or everyone the addon has seen, with each player's status.
+
+![Player list panel](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/players.png)
+
+**Settings.** Right-click the badge or type `/sf settings`.
+
+![Settings panel](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/settings.png)
+
+**Warnings.** Opening a trade, the mailbox or the auction house shows a warning before anything can end your run.
+
+![Trade warning popup](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/trade-warning.png)
+
+**Tooltips.** Hover over a player to see their status and the reason for it.
+
+![Player tooltip with Self-Found status](https://raw.githubusercontent.com/Bryanrodz7/SelfFound/main/docs/tooltip.png)
 
 ## Statuses
 
