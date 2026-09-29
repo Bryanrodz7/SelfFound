@@ -4,7 +4,7 @@
 local _, ns = ...
 local PREFIX        = "SFv1"
 local NET_CHANNEL   = "SFnet"        -- hidden chat channel all users join
-local HB_INTERVAL   = 60             -- seconds between heartbeats
+local HB_INTERVAL   = 300            -- seconds between heartbeats (status changes are sent right away)
 local GAP_TOLERANCE = 120            -- unexplained /played seconds allowed (crash/lag slack)
 -- Obfuscation only; Lua source is readable. Never change this after release:
 -- every existing save is signed with it and would turn BROKEN.
@@ -66,6 +66,7 @@ local function groupChannel()
 end
 
 local function send(msg)
+  if network() == "off" then return end -- solo mode: track yourself, talk to nobody
   if IsInGuild() then SendAddon(PREFIX, msg, "GUILD") end
   local g = groupChannel()
   if g then SendAddon(PREFIX, msg, g) end
@@ -145,9 +146,15 @@ local function witness(target, what)
   if target then send("WIT;" .. strip(target) .. ";" .. what) end
 end
 
+-- Only mail from other players counts. NPC and system mail, auction sale proceeds and
+-- your own returned mail cannot be replied to, which is how we tell them apart.
 local function onMailTaken(i)
-  local _, _, sender, _, money, _, _, itemCount = GetInboxHeaderInfo(i)
-  if (money and money > 0) or (itemCount and itemCount ~= 0) then
+  local _, _, sender, _, money, _, _, itemCount, _, wasReturned, _, canReply = GetInboxHeaderInfo(i)
+  if not ((money and money > 0) or (itemCount and itemCount ~= 0)) then return end
+  local invoice = GetInboxInvoiceInfo and GetInboxInvoiceInfo(i)
+  if invoice == "buyer" then
+    setStatus("BROKEN", "bought from auction house")
+  elseif canReply and not wasReturned and not invoice then
     setStatus("BROKEN", "took mail from " .. (sender or "unknown"))
   end
 end
@@ -197,6 +204,7 @@ local function peerStatus(name, p, status, reason)
 end
 
 local function handle(sender, msg)
+  if network() == "off" then return end
   sender = strip(sender)
   if not sender or sender == me then return end
   local f = split(msg)
@@ -235,7 +243,7 @@ end
 
 -- Flag guildmates who have used the addon but are online without heartbeats.
 local function scanGuild()
-  if not IsInGuild() then return end
+  if not IsInGuild() or network() == "off" then return end
   if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() elseif GuildRoster then GuildRoster() end
   local now = time()
   for i = 1, GetNumGuildMembers() do
@@ -245,7 +253,7 @@ local function scanGuild()
       if online then
         onlineSince[name] = onlineSince[name] or now
         local p = SF_Ledger[name]
-        if p and p.claim and now - onlineSince[name] > 300 and now - (p.lastSeen or 0) > 300 then
+        if p and p.claim and now - onlineSince[name] > HB_INTERVAL * 3 and now - (p.lastSeen or 0) > HB_INTERVAL * 3 then
           peerStatus(name, p, "SUSPECT", "online without the addon running")
         end
       else
@@ -412,6 +420,7 @@ ns.RANK, ns.COLORS, ns.color, ns.played, ns.say = RANK, COLORS, color, played, s
 ns.GetMe = function() return me end
 
 -- "guild": talk over guild/party only. "everyone": also join the server-wide hidden channel.
+-- "off": send and receive nothing.
 ns.SetNetwork = function(mode)
   if SF_Settings then SF_Settings.network = mode end
   if mode == "everyone" then

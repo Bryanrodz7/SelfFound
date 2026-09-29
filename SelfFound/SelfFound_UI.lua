@@ -151,7 +151,7 @@ badge:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 ---------------------------------------------------------------- main panel
 local panel = CreateFrame("Frame", "SelfFoundPanel", UIParent, BACKDROP_TEMPLATE)
-panel:SetSize(320, 460)
+panel:SetSize(320, 504)
 panel:SetPoint("CENTER")
 panel:SetBackdrop(DIALOG)
 panel:SetFrameStrata("DIALOG")
@@ -192,6 +192,8 @@ divider:SetPoint("TOPLEFT", 20, -80); divider:SetPoint("TOPRIGHT", -20, -80)
 
 local footer = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 footer:SetPoint("BOTTOMLEFT", 22, 22)
+footer:SetWidth(118); footer:SetJustifyH("LEFT")
+if footer.SetWordWrap then footer:SetWordWrap(false) end
 
 local toggle = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 toggle:SetSize(90, 22); toggle:SetPoint("BOTTOMRIGHT", -18, 16)
@@ -271,7 +273,9 @@ local function guildMembers()
     if name then
       name = name:gsub("%-.*", "")
       set[name] = true
-      out[#out + 1] = { name = name, p = SF_Ledger and SF_Ledger[name], level = level, online = online and true, guild = true }
+      local p = SF_Ledger and SF_Ledger[name]
+      if name == ns.GetMe() and SF_Char then p = SF_Char end
+      out[#out + 1] = { name = name, p = p, level = level, online = online and true, guild = true }
     end
   end
   return out, set
@@ -328,11 +332,11 @@ RefreshList = function()
   for _, e in ipairs(list) do if e.p and e.p.status == "SF" then sf = sf + 1 end end
   if S.view == "guild" then
     empty:SetText(IsInGuild() and "Loading guild roster..." or "You're not in a guild.\nTry the Everyone tab.")
-    footer:SetText(sf .. " of " .. count .. " guildmates Self-Found")
+    footer:SetText(S.network == "off" and "Solo mode" or (sf .. " of " .. count .. " Self-Found"))
   else
     empty:SetText(S.network == "everyone" and "Nobody seen yet.\nPress Refresh to call out to the server."
       or "Only guild and party players show here.\nTurn on \"Everyone on the server\" in Settings to see more.")
-    footer:SetText(count .. " player" .. (count == 1 and "" or "s") .. " seen")
+    footer:SetText(count .. " seen")
   end
   if count == 0 then empty:Show() else empty:Hide() end
 end
@@ -420,12 +424,13 @@ local function Radio(label, mode, y)
 end
 Radio("My guild (and party)", "guild", -170)
 Radio("Everyone on the server", "everyone", -194)
+Radio("Nobody (only track me)", "off", -218)
 
-Slider("Badge size", "badgeScale", 0.5, 2, -240, ApplyBadge)
-Slider("Window size", "panelScale", 0.7, 1.5, -284, ApplyPanel, true)
+Slider("Badge size", "badgeScale", 0.5, 2, -264, ApplyBadge)
+Slider("Window size", "panelScale", 0.7, 1.5, -308, ApplyPanel, true)
 
 local reset = CreateFrame("Button", nil, settings, "UIPanelButtonTemplate")
-reset:SetSize(150, 22); reset:SetPoint("TOPLEFT", 26, -306)
+reset:SetSize(150, 22); reset:SetPoint("TOPLEFT", 26, -348)
 reset:SetText("Reset badge position")
 reset:SetScript("OnClick", function() S.point = nil; ApplyBadge() end)
 
@@ -477,13 +482,13 @@ StaticPopupDialogs["SELFFOUND_TRADE"] = {
   timeout = 0, whileDead = true, hideOnEscape = true, showAlert = true, preferredIndex = 3,
 }
 StaticPopupDialogs["SELFFOUND_MAIL"] = {
-  text = "|cffffd100Self-Found|r\n\nReading letters is fine, but taking items or gold ends your run.",
+  text = "|cffffd100Self-Found|r\n\nTaking items or gold sent by another player ends your run. Mail from NPCs and auction sales is fine.",
   button1 = "Got it", button2 = "Close mailbox",
   OnCancel = function() CloseMail() end,
   timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
 }
 StaticPopupDialogs["SELFFOUND_AH"] = {
-  text = "|cffffd100Self-Found|r\n\nBuying from the auction house ends your run.",
+  text = "|cffffd100Self-Found|r\n\nBuying from the auction house ends your run. Selling is fine.",
   button1 = "Got it", button2 = "Leave",
   OnCancel = function()
     if C_AuctionHouse and C_AuctionHouse.CloseAuctionHouse then C_AuctionHouse.CloseAuctionHouse()
