@@ -57,6 +57,48 @@ local function played()
   return playedBase + (GetTime() - playedBaseAt)
 end
 
+---------------------------------------------------------------- names
+-- Some clients give characters a first and a last name, and not every API returns both.
+-- Players are matched by GUID first, then by full name, then by first name if that is unambiguous.
+local byGuid, byFirst = {}, {}
+
+local function first(name) return name and name:match("^(%S+)") end
+
+local function sameName(a, b)
+  if not a or not b then return false end
+  if a == b then return true end
+  local short, long = a, b
+  if a:find(" ") then short, long = b, a end
+  return not short:find(" ") and first(long) == short -- one side is missing the last name
+end
+
+local function isMe(name, guid)
+  if guid and guid ~= "" and myGUID then return guid == myGUID end
+  return sameName(name, me)
+end
+
+local function index(key, p)
+  if p.guid then byGuid[p.guid] = key end
+  local f = first(key)
+  if f then
+    if byFirst[f] == nil or byFirst[f] == key then byFirst[f] = key else byFirst[f] = false end
+  end
+end
+
+-- Returns the ledger key for a player, or nil if we have no record of them.
+local function findKey(name, guid)
+  if not SF_Ledger then return nil end
+  local hasGuid = guid and guid ~= ""
+  local key = hasGuid and byGuid[guid]
+  if key and SF_Ledger[key] then return key end
+  if not name then return nil end
+  key = SF_Ledger[name] and name or byFirst[first(name)]
+  local p = key and SF_Ledger[key]
+  if not p or not sameName(key, name) then return nil end
+  if hasGuid and p.guid and p.guid ~= guid then return nil end -- same name, different character
+  return key
+end
+
 local function groupChannel()
   if IsInRaid then
     if IsInRaid() then return "RAID" elseif IsInGroup() then return "PARTY" end
@@ -95,7 +137,7 @@ local function heartbeat()
   local d = SF_Char
   if not d then return end
   send(table.concat({ "HB", d.status, math.floor(played() or d.played or 0),
-    UnitLevel("player"), d.seq or 0, clean(d.reason) }, ";"))
+    UnitLevel("player"), d.seq or 0, clean(d.reason), myGUID or "", clean(me) }, ";"))
 end
 
 local function setStatus(status, reason)
@@ -140,10 +182,10 @@ local function verify(total)
 end
 
 ---------------------------------------------------------------- violation detection
-local tradeTarget
+local tradeTarget, tradeGuid
 
-local function witness(target, what)
-  if target then send("WIT;" .. strip(target) .. ";" .. what) end
+local function witness(target, what, guid)
+  if target then send("WIT;" .. clean(strip(target)) .. ";" .. what .. ";" .. (guid or "")) end
 end
 
 -- Only mail from other players counts. NPC and system mail, auction sale proceeds and
@@ -184,13 +226,23 @@ if C_AuctionHouse then
 end
 
 ---------------------------------------------------------------- peer ledger
-local function peer(name)
-  local p = SF_Ledger[name]
+-- rename: the name came from the player themselves, so move a record filed under a
+-- shorter name (for example from a trade report) to their full name.
+local function peer(name, guid, rename)
+  local key = findKey(name, guid)
+  local p = key and SF_Ledger[key]
   if not p then
-    p = { status = "UNVERIFIED", played = 0, reports = {} }
-    SF_Ledger[name] = p
+    key, p = name, { status = "UNVERIFIED", played = 0, reports = {} }
+    SF_Ledger[key] = p
+  elseif rename and key ~= name and not SF_Ledger[name] then
+    SF_Ledger[key] = nil
+    if byFirst[first(key)] == key then byFirst[first(key)] = nil end
+    key = name
+    SF_Ledger[key] = p
   end
-  return p
+  if guid and guid ~= "" and not p.guid then p.guid = guid end
+  index(key, p)
+  return p, key
 end
 
 local function peerStatus(name, p, status, reason)
@@ -206,8 +258,10 @@ end
 local function handle(sender, msg)
   if network() == "off" then return end
   sender = strip(sender)
-  if not sender or sender == me then return end
+  if not sender then return end
   local f = split(msg)
+  local guid = f[1] == "HB" and f[7] or nil
+  if isMe(sender, guid) then return end
   if f[1] == "HELLO" then
     -- someone asked for a roll call; answer after a random delay so replies don't flood
     if not pendingHB then pendingHB = GetTime() + 1 + math.random() * 5 end
@@ -215,7 +269,11 @@ local function handle(sender, msg)
   elseif f[1] == "HB" then
     local status, pl = f[2], tonumber(f[3]) or 0
     if not RANK[status] then return end
-    local p = peer(sender)
+    -- Use the full name the player reports, but only if it fits the name the server gave us.
+    local name = f[8]
+    if not name or name == "" or first(name) ~= first(sender) then name = sender end
+    local p
+    p, sender = peer(name, guid, true)
     if pl < (p.played or 0) - 30 then
       peerStatus(sender, p, "BROKEN", "played time went backwards (rolled-back save)")
     end
@@ -227,8 +285,9 @@ local function handle(sender, msg)
     p.claim, p.played, p.level, p.lastSeen = status, math.max(pl, p.played or 0), tonumber(f[4]), time()
   elseif f[1] == "WIT" and f[2] and f[2] ~= "" then
     local target = f[2]
-    if target == me then return end -- your own addon already judged you
-    local p = peer(target)
+    if isMe(target, f[4]) then return end -- your own addon already judged you
+    local p
+    p, target = peer(target, f[4])
     p.reports[sender] = f[3]
     local n = 0
     for _ in pairs(p.reports) do n = n + 1 end
@@ -247,12 +306,13 @@ local function scanGuild()
   if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() elseif GuildRoster then GuildRoster() end
   local now = time()
   for i = 1, GetNumGuildMembers() do
-    local name, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
+    local name, _, _, _, _, _, _, _, online, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
     name = strip(name)
-    if name and name ~= me then
+    if name and not isMe(name, guid) then
       if online then
         onlineSince[name] = onlineSince[name] or now
-        local p = SF_Ledger[name]
+        local key = findKey(name, guid)
+        local p = key and SF_Ledger[key]
         if p and p.claim and now - onlineSince[name] > HB_INTERVAL * 3 and now - (p.lastSeen or 0) > HB_INTERVAL * 3 then
           peerStatus(name, p, "SUSPECT", "online without the addon running")
         end
@@ -269,15 +329,16 @@ local function tipLine(tt)
   local _, unit = tt:GetUnit()
   if issecretvalue and issecretvalue(unit) then return end -- 12.0+: restricted during encounters
   if not unit or not UnitIsPlayer(unit) then return end
-  local name = UnitName(unit)
-  if issecretvalue and issecretvalue(name) then return end
+  local name, guid = UnitName(unit), UnitGUID(unit)
+  if issecretvalue and (issecretvalue(name) or issecretvalue(guid)) then return end
   name = strip(name)
   if not name or not SF_Ledger then return end
   local status, reason
-  if name == me and SF_Char then
-    status, reason = SF_Char.status, SF_Char.reason
-  elseif SF_Ledger[name] then
-    status, reason = SF_Ledger[name].status, SF_Ledger[name].reason
+  if isMe(name, guid) then
+    if SF_Char then status, reason = SF_Char.status, SF_Char.reason end
+  else
+    local key = findKey(name, guid)
+    if key then status, reason = SF_Ledger[key].status, SF_Ledger[key].reason end
   end
   if status then
     tt:AddLine("Self-Found: " .. color(status))
@@ -346,6 +407,7 @@ SF:SetScript("OnEvent", function(self, event, ...)
     SF_Ledger = SF_Ledger or {}
   elseif event == "PLAYER_LOGIN" then
     me, myGUID = UnitName("player"), UnitGUID("player")
+    for key, p in pairs(SF_Ledger) do index(key, p) end
     loginTimer = 5 -- join channel and request /played after the world settles
   elseif event == "TIME_PLAYED_MSG" then
     local total = ...
@@ -363,12 +425,13 @@ SF:SetScript("OnEvent", function(self, event, ...)
   elseif event == "PLAYER_LEVEL_UP" then
     if ready then heartbeat() end
   elseif event == "TRADE_SHOW" then
-    tradeTarget = UnitName("NPC")
+    tradeGuid = UnitGUID("NPC")
+    tradeTarget = findKey(UnitName("NPC"), tradeGuid) or UnitName("NPC")
   elseif event == "UI_INFO_MESSAGE" then
     for i = 1, select("#", ...) do
       if select(i, ...) == ERR_TRADE_COMPLETE then
         setStatus("BROKEN", "traded with " .. (tradeTarget or "unknown"))
-        witness(tradeTarget, "trade")
+        witness(tradeTarget, "trade", tradeGuid)
       end
     end
   elseif event == "MAIL_SEND_SUCCESS" then
@@ -418,6 +481,11 @@ end)
 ---------------------------------------------------------------- shared with UI
 ns.RANK, ns.COLORS, ns.color, ns.played, ns.say = RANK, COLORS, color, played, say
 ns.GetMe = function() return me end
+ns.IsMe = isMe
+ns.Find = function(name, guid)
+  local key = findKey(name, guid)
+  return key and SF_Ledger[key]
+end
 
 -- "guild": talk over guild/party only. "everyone": also join the server-wide hidden channel.
 -- "off": send and receive nothing.

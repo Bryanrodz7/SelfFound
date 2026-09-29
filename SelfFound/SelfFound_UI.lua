@@ -269,13 +269,14 @@ local function guildMembers()
   local out, set = {}, {}
   if not IsInGuild() then return out, set end
   for i = 1, GetNumGuildMembers() do
-    local name, _, _, level, _, _, _, _, online = GetGuildRosterInfo(i)
+    local name, _, _, level, _, _, _, _, online, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
     if name then
       name = name:gsub("%-.*", "")
       set[name] = true
-      local p = SF_Ledger and SF_Ledger[name]
-      if name == ns.GetMe() and SF_Char then p = SF_Char end
-      out[#out + 1] = { name = name, p = p, level = level, online = online and true, guild = true }
+      local p = ns.Find(name, guid)
+      local isMe = ns.IsMe(name, guid)
+      if isMe and SF_Char then p = SF_Char end
+      out[#out + 1] = { name = name, p = p, level = level, online = online and true, guild = true, isMe = isMe }
     end
   end
   return out, set
@@ -283,7 +284,7 @@ end
 
 local function statusText(e)
   local p = e.p
-  if e.name == ns.GetMe() and SF_Char then p = { status = SF_Char.status } end
+  if e.isMe and SF_Char then p = { status = SF_Char.status } end
   if not p then return "|cff777777No addon|r" end
   local s = p.status == "SF" and ns.color("SF"):gsub("SF", "Self-Found") or ns.color(p.status)
   return s .. (p.liar and " |cffff4444!|r" or "")
