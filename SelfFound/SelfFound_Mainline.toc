@@ -1,0 +1,13 @@
+## Interface: 120100
+## Title: SelfFound
+## Notes: Self-found challenge tracker with peer verification
+## Author: Bryan
+## Version: @project-version@
+## IconTexture: Interface\Icons\INV_Shield_06
+## Category: Other
+## X-Curse-Project-ID: 000000
+## SavedVariablesPerCharacter: SF_Char
+## SavedVariables: SF_Ledger, SF_Settings
+
+SelfFound.lua
+SelfFound_UI.lua

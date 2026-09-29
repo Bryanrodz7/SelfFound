@@ -1,0 +1,22 @@
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build output / archives
+*.zip
+.release/
+
+# Secrets
+.env
+.env.*
+
+# Claude Code local settings
+.claude/

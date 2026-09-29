@@ -1,0 +1,18 @@
+package-as: SelfFound
+
+# The addon lives in the SelfFound/ subfolder of the repo; lift it to the zip root.
+move-folders:
+  SelfFound/SelfFound: SelfFound
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - README.md
+  - docs
+  - .github
+  - .gitignore
+  - .pkgmeta
+  - .claude
+  - "*.zip"
